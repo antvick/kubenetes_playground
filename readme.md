@@ -1,4 +1,4 @@
 # Kubernetes Playground
 
-A playground to test Kubenetes in a multi-machine Vagrant cluster.
+A playground to test Kubernetes in a multi-machine Vagrant cluster.
 
