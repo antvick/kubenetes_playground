@@ -1,0 +1,61 @@
+- debug:
+    var: hostvars
+
+# - debug:
+#     var: ansible_facts
+
+- debug: 
+    var: hostvars['demo-master']['groups']['master']
+
+# - name: Update packages
+#   yum:
+#     name: "*"
+#     state: latest
+#   become: True
+
+- name: Update hosts file
+  lineinfile:
+    path: /etc/hosts
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    create: yes
+  with_items:
+    - { regexp: '.*demo-master', line: '192.200.50.4 demo-master demo-master' }
+    - { regexp: ',*demo-node', line: '192.200.50.5 demo-node demo-node' }
+  become: True
+
+- name: Disable SE Linux
+  selinux:
+    state: disabled
+  become: True
+
+- name: Check SWAP enabled
+  shell: |
+    swapon -s
+  become: True
+  register: swap_enabled
+  changed_when: False
+
+- name: Disable SWAP (1/2)
+  shell: |
+    swapoff -a
+  become: True
+  when: swap_enabled.stdout | length > 0
+
+- name: Disable SWAP in fstab (2/2)
+  replace:
+    path: /etc/fstab
+    regexp: '^([^#].*?\sswap\s+sw\s+.*)$'
+    replace: '# \1'
+  become: True
+
+- name: Send packets to IP tables
+  copy:
+    src: k8s.conf
+    dest: /etc/sysctl.d/k8s.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - Reload sysctl
+  become: True

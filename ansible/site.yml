@@ -1,4 +1,8 @@
 ---
 - hosts: all
   roles:
-    - kubenetes
+    - common
+    - docker
+    - kubernetes
+
+

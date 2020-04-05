@@ -1,0 +1,92 @@
+- name: Install Kubernetes repo
+  yum_repository:
+    name: Kubernetes
+    description: Kubernetes repo
+    baseurl: https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+    enabled: True
+    gpgcheck: True
+    repo_gpgcheck: True
+    gpgkey: https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+  become: True
+
+- name: Install Kubernetes tools
+  package:
+    name:
+      - kubelet
+      - kubeadm
+      - kubectl
+    state: latest
+  notify:
+  - enable and start kubelet
+  become: True
+
+- meta: flush_handlers
+
+- name: Check Kubernetes installation
+  stat:
+    path: /home/vagrant/.kube/config
+  register: Kubernetes_initialized
+
+- name: Initalize Kubernetes
+  shell: |
+    kubeadm init --pod-network-cidr=10.244.0.0/16 \
+                 --apiserver-advertise-address 192.200.50.4
+  become: True
+  register: kube_registration
+  when: (Kubernetes_initialized.stat.exists == False) and
+        (ansible_facts['nodename'] in hostvars['demo-master']['groups']['master'])
+
+- debug:
+    var: kube_registration
+
+- set_fact:
+    registration_token: "{{ kube_registration.stdout | regex_search('--token ([^\\s]+)','\\1') }}"
+    discovery_token_ca_cert_hash: "{{ kube_registration.stdout | regex_search('--discovery-token-ca-cert-hash ([^\\s]+)','\\1') }}"
+  when: (kube_registration is defined) and
+        (ansible_facts['nodename'] in hostvars['demo-master']['groups']['master'])
+
+# - debug:
+#     var: ansible_facts
+
+
+- name: Create Kubernetes directory for Vagrant user
+  file:
+    state: directory
+    path: /home/vagrant/.kube
+  when: ansible_facts['nodename'] in hostvars['demo-master']['groups']['master']
+  become_user: vagrant
+
+- name: Copy Kubernetes admin configuration
+  copy:
+    remote_src: True
+    src: /etc/kubernetes/admin.conf
+    dest: /home/vagrant/.kube/config
+    owner: vagrant
+    group: vagrant
+    mode: '0644'
+  when: ansible_facts['nodename'] in hostvars['demo-master']['groups']['master']
+  become: True
+
+- name: Deploy pod network
+  shell: |
+    kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+  when: ansible_facts['nodename'] in hostvars['demo-master']['groups']['master']
+
+- name:  Kick the Kubernetes API
+  uri:
+    url: https://demo-master:6443
+    validate_certs: False
+    status_code: 403
+  retries: 5
+  delay: 10
+  when: ansible_facts['nodename'] in hostvars['demo-master']['groups']['master']
+
+- name: Register Nodes
+  shell: |
+    kubeadm join demo-master:6443 \
+      --token {{ hostvars['demo-master']['registration_token'][0] }} \ 
+      --discovery-token-unsafe-skip-ca-verification
+  when: ansible_facts['nodename'] in hostvars['demo-master']['groups']['node']
+  become: True
+  retries: 3
+  delay: 10

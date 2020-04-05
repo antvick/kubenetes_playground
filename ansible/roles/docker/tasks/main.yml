@@ -1,0 +1,69 @@
+- name: Remove docker if installed from CentOS repo
+  yum:
+    name:
+      - docker
+      - docker-client
+      - docker-client-latest
+      - docker-common
+      - docker-latest
+      - docker-latest-logrotate
+      - docker-logrotate
+      - docker-engine
+    state: removed
+  become: True
+
+- name: Install required pkgs
+  yum:
+    name: ['yum-utils', 'device-mapper-persistent-data', 'lvm2']
+    state: latest
+  become: True
+
+- name: Add Docker repo
+  get_url:
+    url: https://download.docker.com/linux/centos/docker-ce.repo
+    dest: /etc/yum.repos.d/docer-ce.repo
+  become: True
+
+- name: Enable Docker Edge & Test repo
+  ini_file:
+    dest: /etc/yum.repos.d/docker-ce.repo
+    section: "{{ item }}"
+    option: enabled
+    value: "0"
+  with_items: 
+    - 'docker-ce-test'
+    - 'docker-ce-edge'
+  become: True
+
+- name: Install Docker
+  package:
+    name: docker-ce
+    state: latest
+  become: True
+
+- name: Start Docker service
+  service:
+    name: docker
+    state: started
+    enabled: yes
+  become: True
+
+- name: Add user vagrant to docker group
+  user:
+    name: vagrant
+    groups: docker
+    append: yes
+  become: True
+
+- name: Update docker cgroup-driver
+  copy:
+    src: daemon.json
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - restart docker
+  become: True
+
+- meta: flush_handlers
