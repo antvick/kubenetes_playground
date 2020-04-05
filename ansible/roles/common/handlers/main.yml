@@ -1,0 +1,8 @@
+- name: Reload sysctl
+  shell: |
+    sysctl --system
+  become: True
+
+- name: Reboot
+  reboot:
+  become: True

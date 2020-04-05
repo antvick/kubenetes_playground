@@ -2,8 +2,7 @@
 - hosts: all
   roles:
     - common
+    - docker
+    - kubernetes
 
-- hosts: master
-  roles:
-    - kubenetes
 
